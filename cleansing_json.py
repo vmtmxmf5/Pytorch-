@@ -60,7 +60,7 @@ def clean_lng(sentence, unicode):
     return result
 
 
-def cleansing_data(chunk_data, q):
+def cleansing_data(chunk_data, q, pid):
     '''
     chunk json 넣어주시면 전처리해서 새로운 OrderedDict를 반환합니다
     '''
@@ -100,7 +100,27 @@ def cleansing_data(chunk_data, q):
         new_line['domain'] = line['domain']
         new.append(new_line)
     q.put(new)
+    print(pid, '현재 queue에 쌓인 개수: ', q.qsize())
     #return new
+
+def dump_queue(q):
+    """
+    queue 데이터를 모두 list로 바꿔줌
+    """
+    q.put('STOP')
+    result = []
+    for j in iter(q.get, 'STOP'):
+        result.append(j)
+    return result
+
+def wait_until(cond1, cond2, timeout, period=0.25):
+    end = time.time() + timeout
+    while time.time() < end:
+        if cond1 == cond2:
+            return True
+        time.sleep(period)
+    return False
+
 
 import multiprocessing
 import time
@@ -110,30 +130,37 @@ from collections import OrderedDict
 
 if __name__ == '__main__':
     startTime = float(time.time())
-    
-    q = multiprocessing.Queue()
-    path = 'C:/Users/CPB06GameN/글을쓰자/PyTorch-master/연습폴더/final_chunk'
 
-    for i in range(9):
+    workers, last_files = 4, 4
+    q = multiprocessing.Queue() # shared queue
+    path = 'C:/Users/CPB06GameN/글을쓰자/PyTorch-master/연습폴더/final_chunk'
+    
+    processes = []
+    for i in range(last_files):
         with open(path + f'/final_{i}.json', 'r', encoding='utf-8') as f:
             json_file = json.load(f, object_pairs_hook=OrderedDict)
-
-        p1 = multiprocessing.Process(target=cleansing_data,
-                                    args=(json_file[0::3],q))
-        p2 = multiprocessing.Process(target=cleansing_data,
-                                    args=(json_file[1::3],q))
-        p3 = multiprocessing.Process(target=cleansing_data,
-                                    args=(json_file[2::3],q))
-        
-        for p in p1, p2, p3:
+        sub_process = []
+        for p_start in range(0, workers):
+            p_num = ['1st', '2nd', '3rd', '4th']
+            p = multiprocessing.Process(target=cleansing_data,
+                                        args=(json_file[p_start::workers], q, p_num[p_start]))
+            processes.append(p)
+            sub_process.append(p)
+        for p in sub_process:
             p.start()
-    
-    # session 을 끝내는게 join()
-    # for p in p1, p2, p3:
-    #     p.join()
-    print(q.get())
+            
+    # main process가 마지막 queue를 가져감, qsize 조건문을 걸자     
+    wait_until(q.qsize(), workers*last_files, 10)
+    fin = dump_queue(q)
+    print(len(fin[15])) # worker 1명이 처리한 데이터 개수
+
     q.close()
     q.join_thread()
+
+    # main 프로세스가 sub 프로세스가 끝날 때 까지 기다린다 == join()
+    for p in processes:
+        p.terminate()
+        p.join()
 
     endTime = float(time.time())
     print("총 작업 시간", (endTime - startTime))
