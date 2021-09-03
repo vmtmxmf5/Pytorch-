@@ -148,7 +148,6 @@ if __name__ == '__main__':
             sub_process.append(p)
         for p in sub_process:
             p.start()
-            
     # main process가 마지막 queue를 가져감, qsize 조건문을 걸자     
     wait_until(q.qsize(), workers*last_files, 10)
     fin = dump_queue(q)
